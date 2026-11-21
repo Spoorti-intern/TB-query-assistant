@@ -7,16 +7,25 @@ from cryptography.fernet import Fernet
 
 def _get_encryption_key():
     """
-    Load or generate a Fernet encryption key.
-    The key is stored in backend/.encryption_key (gitignored).
+    Load a Fernet encryption key.
+    Prefers ENCRYPTION_KEY env var (required on Vercel/serverless).
+    Falls back to backend/.encryption_key file for local development.
     """
+    env_key = os.getenv("ENCRYPTION_KEY")
+    if env_key:
+        return env_key.strip().encode() if isinstance(env_key, str) else env_key.strip()
+
     key_path = Path(__file__).resolve().parents[2] / ".encryption_key"
 
     if key_path.exists():
         return key_path.read_bytes().strip()
 
+    # Local dev only: generate and save a new key
     key = Fernet.generate_key()
-    key_path.write_bytes(key)
+    try:
+        key_path.write_bytes(key)
+    except OSError:
+        pass  # Read-only filesystem (e.g. Vercel)
     return key
 
 

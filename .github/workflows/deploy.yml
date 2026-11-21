@@ -20,7 +20,6 @@ jobs:
 
       - name: Pull Vercel Environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: ./backend
 
       - name: Deploy Backend to Production
         id: deploy-backend
@@ -29,7 +28,6 @@ jobs:
           echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
           echo "### Backend Deployment :rocket:" >> $GITHUB_STEP_SUMMARY
           echo "**URL:** $DEPLOYMENT_URL" >> $GITHUB_STEP_SUMMARY
-        working-directory: ./backend
 
   deploy-frontend:
     name: Deploy Frontend
@@ -47,7 +45,6 @@ jobs:
 
       - name: Pull Vercel Environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-        working-directory: ./frontend
 
       - name: Deploy Frontend to Production
         id: deploy-frontend
@@ -56,4 +53,3 @@ jobs:
           echo "url=$DEPLOYMENT_URL" >> $GITHUB_OUTPUT
           echo "### Frontend Deployment :rocket:" >> $GITHUB_STEP_SUMMARY
           echo "**URL:** $DEPLOYMENT_URL" >> $GITHUB_STEP_SUMMARY
-        working-directory: ./frontend

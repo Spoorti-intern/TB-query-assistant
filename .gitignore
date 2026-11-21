@@ -1,0 +1,21 @@
+
+.nia/NIA.local.md
+
+# nia-ide: managed by Nia IDE
+.nia/
+.claude/
+
+# Secrets
+backend/.env
+backend/.encryption_key
+*.env.local
+
+# Python
+__pycache__/
+*.pyc
+backend/venv/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+.tmp/

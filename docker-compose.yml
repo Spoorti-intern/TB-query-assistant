@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: tb-query-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tb_query_db
+      POSTGRES_USER: tb_user
+      POSTGRES_PASSWORD: local_dev_password_123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tb_user -d tb_query_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

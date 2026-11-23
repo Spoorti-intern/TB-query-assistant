@@ -21,6 +21,7 @@ export default function ChatPage({
   hasPaid = false,
   onUseCredit,
   onUpgrade,
+  onOpenConnection,
 }) {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -55,11 +56,31 @@ export default function ChatPage({
     };
   }, [attachMenuOpen]);
 
-  const activeConnector = connectors.find((c) => String(c.id) === String(selectedConnectorId));
+  const hasConnectedDB = connectors.some((c) => c.status === "connected");
 
   const handleSend = async (text) => {
     text = (text || input).trim();
     if (!text || isStreaming || sendingRef.current) return;
+
+    // If no database connected, prompt user to add one
+    if (!hasConnectedDB) {
+      setInput("");
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: text },
+        {
+          role: "assistant",
+          content: "You don't have any database connected yet. Please add a database connection first to start querying.",
+          status: "done",
+          steps: [],
+          statusMessages: [],
+          toolResults: [],
+        },
+      ]);
+      // Auto-open the connection modal
+      if (onOpenConnection) onOpenConnection();
+      return;
+    }
 
     // Check credits before sending
     if (credits <= 0) {
@@ -426,7 +447,12 @@ export default function ChatPage({
           </div>
         </div>
       ) : (
-        <EmptyState onSuggestion={(prompt) => handleSend(prompt)} tableNames={tableNames} />
+        <EmptyState
+          onSuggestion={(prompt) => handleSend(prompt)}
+          tableNames={tableNames}
+          hasConnection={hasConnectedDB}
+          onOpenConnection={onOpenConnection}
+        />
       )}
 
       <div className="composer-wrapper">

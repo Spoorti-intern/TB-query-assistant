@@ -543,6 +543,7 @@ function AppShell({ user, onLogout, credits, hasPaid, onUseCredit, onUpgrade, on
           hasPaid={hasPaid}
           onUseCredit={onUseCredit}
           onUpgrade={onUpgrade}
+          onOpenConnection={() => setConnectorModalOpen(true)}
         />
       </main>
 

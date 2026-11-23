@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import { Database, Search, Zap, Table2, BarChart3 } from "lucide-react";
+import { Database, Search, Zap, Table2, BarChart3, Link2, ArrowRight } from "lucide-react";
 
-export default function EmptyState({ onSuggestion, tableNames = [] }) {
+export default function EmptyState({ onSuggestion, tableNames = [], hasConnection = true, onOpenConnection }) {
   // Pick random sample tables for suggestions
   const sampleTables = useMemo(() => {
     if (!tableNames.length) return [];
@@ -68,6 +68,39 @@ export default function EmptyState({ onSuggestion, tableNames = [] }) {
       },
     ];
   }, [sampleTables]);
+
+  // No database connected — show connect prompt
+  if (!hasConnection) {
+    return (
+      <div className="empty-state">
+        <div className="empty-logo empty-logo--connect">
+          <Link2 size={26} />
+        </div>
+        <h1 className="empty-title">Connect a Database</h1>
+        <p className="empty-subtitle">
+          Add your database connection to start querying. Paste a connection URL or enter details manually.
+        </p>
+
+        <button
+          className="empty-connect-btn"
+          onClick={onOpenConnection}
+        >
+          <Database size={16} />
+          Add Database Connection
+          <ArrowRight size={14} />
+        </button>
+
+        <div className="empty-connect-types">
+          <span>PostgreSQL</span>
+          <span>MySQL</span>
+          <span>SQL Server</span>
+          <span>MongoDB</span>
+          <span>Supabase</span>
+          <span>Neon</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="empty-state">

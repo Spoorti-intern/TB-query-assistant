@@ -16,7 +16,19 @@ def get_mongodb_client(connector):
     try:
         password = decrypt_password(connector.password)
 
-        if connector.username and password:
+        # Atlas clusters use mongodb+srv:// protocol
+        is_atlas = "mongodb.net" in connector.host
+
+        if is_atlas and connector.username and password:
+            from urllib.parse import quote_plus
+            uri = (
+                f"mongodb+srv://{quote_plus(connector.username)}:{quote_plus(password)}"
+                f"@{connector.host}/{connector.database}"
+                f"?retryWrites=true&w=majority"
+            )
+            client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+
+        elif connector.username and password:
             client = MongoClient(
                 host=connector.host,
                 port=connector.port or 27017,

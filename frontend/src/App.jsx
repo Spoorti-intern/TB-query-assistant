@@ -259,9 +259,9 @@ function AppShell({ user, onLogout, credits, hasPaid, onUseCredit, onUpgrade, on
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [connectors, setConnectors] = useState([]);
   const [selectedConnectorId, setSelectedConnectorId] = useState("");
-  const [connectorModalOpen, setConnectorModalOpen] = useState(false);
   const [detectReason, setDetectReason] = useState("");
   const [testingConnectors, setTestingConnectors] = useState({});
+  const [connectorModalOpen, setConnectorModalOpen] = useState(false);
 
   // Chat sessions
   const [sessions, setSessions] = useState([]);
@@ -503,21 +503,11 @@ function AppShell({ user, onLogout, credits, hasPaid, onUseCredit, onUpgrade, on
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-        sessions={sessions}
-        currentSessionId={currentSessionId}
-        onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
-        onDeleteSession={handleDeleteSession}
-        onRenameSession={handleRenameSession}
-        connectors={connectors}
-        selectedConnectorId={selectedConnectorId}
-        onSelectConnector={(id) => setSelectedConnectorId(id)}
-        onAddConnection={() => setConnectorModalOpen(true)}
-        testingConnectors={testingConnectors}
+        onNewConnection={() => setConnectorModalOpen(true)}
         user={user}
         onLogout={onLogout}
         credits={credits}
-        hasPaid={hasPaid}
         onUpgrade={onUpgrade}
         onShowAdmin={onShowAdmin}
       />
@@ -535,8 +525,6 @@ function AppShell({ user, onLogout, credits, hasPaid, onUseCredit, onUpgrade, on
         <Topbar
           title={chatTitle}
           onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-          activeConnector={connectors.find((c) => String(c.id) === String(selectedConnectorId))}
-          detectReason={detectReason}
           user={user}
           onLogout={onLogout}
         />
@@ -561,7 +549,7 @@ function AppShell({ user, onLogout, credits, hasPaid, onUseCredit, onUpgrade, on
       <ConnectorModal
         open={connectorModalOpen}
         onClose={() => setConnectorModalOpen(false)}
-        onCreated={fetchConnectors}
+        onCreated={() => { fetchConnectors(); setConnectorModalOpen(false); }}
         connectors={connectors}
         onRefresh={fetchConnectors}
       />

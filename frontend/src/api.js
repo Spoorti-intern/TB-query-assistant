@@ -5,7 +5,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   (window.location.hostname !== "localhost"
     ? "https://tb-query-assistant-tydh-iota.vercel.app"
-    : "http://127.0.0.1:8101");
+    : "http://127.0.0.1:8103");
 
 const api = axios.create({
   baseURL: API_BASE_URL,

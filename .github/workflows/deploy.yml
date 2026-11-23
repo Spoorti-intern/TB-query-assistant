@@ -21,6 +21,19 @@ jobs:
       - name: Pull Vercel Environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Set SMTP Environment Variables
+        run: |
+          # Remove existing SMTP vars (ignore errors if they don't exist)
+          for VAR in SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM; do
+            echo "y" | vercel env rm "$VAR" production --token=${{ secrets.VERCEL_TOKEN }} 2>/dev/null || true
+          done
+          # Add SMTP vars
+          echo "${{ secrets.SMTP_HOST }}" | vercel env add SMTP_HOST production --token=${{ secrets.VERCEL_TOKEN }}
+          echo "${{ secrets.SMTP_PORT }}" | vercel env add SMTP_PORT production --token=${{ secrets.VERCEL_TOKEN }}
+          echo "${{ secrets.SMTP_USER }}" | vercel env add SMTP_USER production --token=${{ secrets.VERCEL_TOKEN }}
+          echo "${{ secrets.SMTP_PASS }}" | vercel env add SMTP_PASS production --token=${{ secrets.VERCEL_TOKEN }}
+          echo "${{ secrets.SMTP_FROM }}" | vercel env add SMTP_FROM production --token=${{ secrets.VERCEL_TOKEN }}
+
       - name: Deploy Backend to Production
         id: deploy-backend
         run: |

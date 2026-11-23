@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Plus, Database, MessageSquare, X, PanelLeftClose, Pencil, Check, Loader, ChevronDown, ChevronUp } from "lucide-react";
+import { useState } from "react";
+import { Plus, Database, MessageSquare, X, PanelLeftClose, Pencil, Check, Loader, ChevronDown, ChevronUp, LogOut, CreditCard, Crown, Settings } from "lucide-react";
 
 const DB_TYPE_COLORS = {
   postgresql: "#336791",
@@ -53,6 +53,12 @@ export default function Sidebar({
   onSelectConnector,
   onAddConnection,
   testingConnectors = {},
+  user,
+  onLogout,
+  credits = 0,
+  hasPaid = false,
+  onUpgrade,
+  onShowAdmin,
 }) {
   const [dbPanelOpen, setDbPanelOpen] = useState(true);
 
@@ -80,7 +86,7 @@ export default function Sidebar({
           <div className="sidebar-logo">
             <Database size={16} />
           </div>
-          <span className="sidebar-brand-text">TB Query</span>
+          <span className="sidebar-brand-text">Query Ops</span>
         </div>
         <button className="sidebar-toggle" onClick={onToggle} title="Collapse sidebar">
           <PanelLeftClose size={16} />
@@ -92,7 +98,7 @@ export default function Sidebar({
         New Chat
       </button>
 
-      {/* ── DATABASE CONNECTIONS PANEL ── */}
+      {/* DATABASE CONNECTIONS PANEL */}
       <div className="sidebar-db-panel">
         <button
           className="sidebar-db-panel-header"
@@ -164,7 +170,7 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* ── Active DB indicator ── */}
+      {/* Active DB indicator */}
       {activeConnector && (
         <div className="sidebar-active-db">
           <span
@@ -180,11 +186,86 @@ export default function Sidebar({
         </div>
       )}
 
-      <div className="sidebar-history">
-        {groups.today.length > 0 && (
-          <div className="sidebar-history-group">
-            <div className="sidebar-section-label">Today</div>
-            {groups.today.map((s) => (
+      {/* Credits indicator */}
+      {user && (
+        <div className="sidebar-credits">
+          <div className="sidebar-credits-bar">
+            <CreditCard size={13} />
+            <span className="sidebar-credits-label">Credits</span>
+            <span className={`sidebar-credits-count ${credits <= 0 ? "empty" : ""}`}>
+              {credits}
+            </span>
+          </div>
+          {credits <= 0 && (
+            <button className="sidebar-upgrade-btn" onClick={onUpgrade}>
+              <Crown size={12} /> Buy Credits
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Chat history — show only 2 free chats if not paid, full history if paid */}
+      {user && hasPaid ? (
+        <div className="sidebar-history">
+          {groups.today.length > 0 && (
+            <div className="sidebar-history-group">
+              <div className="sidebar-section-label">Today</div>
+              {groups.today.map((s) => (
+                <SessionItem
+                  key={s.id}
+                  session={s}
+                  active={s.id === currentSessionId}
+                  onSelect={() => onSelectSession(s.id)}
+                  onDelete={() => onDeleteSession(s.id)}
+                  onRename={(title) => onRenameSession(s.id, title)}
+                />
+              ))}
+            </div>
+          )}
+
+          {groups.yesterday.length > 0 && (
+            <div className="sidebar-history-group">
+              <div className="sidebar-section-label">Yesterday</div>
+              {groups.yesterday.map((s) => (
+                <SessionItem
+                  key={s.id}
+                  session={s}
+                  active={s.id === currentSessionId}
+                  onSelect={() => onSelectSession(s.id)}
+                  onDelete={() => onDeleteSession(s.id)}
+                  onRename={(title) => onRenameSession(s.id, title)}
+                />
+              ))}
+            </div>
+          )}
+
+          {groups.older.length > 0 && (
+            <div className="sidebar-history-group">
+              <div className="sidebar-section-label">Previous</div>
+              {groups.older.map((s) => (
+                <SessionItem
+                  key={s.id}
+                  session={s}
+                  active={s.id === currentSessionId}
+                  onSelect={() => onSelectSession(s.id)}
+                  onDelete={() => onDeleteSession(s.id)}
+                  onRename={(title) => onRenameSession(s.id, title)}
+                />
+              ))}
+            </div>
+          )}
+
+          {(!sessions || sessions.length === 0) && (
+            <div style={{ padding: "12px 8px", color: "var(--text-tertiary)", fontSize: 12 }}>
+              No conversations yet
+            </div>
+          )}
+        </div>
+      ) : user && !hasPaid ? (
+        <div className="sidebar-history">
+          <div className="sidebar-free-chats">
+            <div className="sidebar-section-label">Free Chats</div>
+            {sessions.slice(0, 2).map((s) => (
               <SessionItem
                 key={s.id}
                 session={s}
@@ -194,47 +275,43 @@ export default function Sidebar({
                 onRename={(title) => onRenameSession(s.id, title)}
               />
             ))}
+            {sessions.length > 2 && (
+              <div className="sidebar-locked-chats">
+                <Crown size={12} />
+                <span>{sessions.length - 2} more chats — <button onClick={onUpgrade}>Upgrade to view</button></span>
+              </div>
+            )}
+            {sessions.length === 0 && (
+              <div style={{ padding: "8px", color: "var(--text-tertiary)", fontSize: 12 }}>
+                Start chatting to see history
+              </div>
+            )}
           </div>
-        )}
+        </div>
+      ) : null}
 
-        {groups.yesterday.length > 0 && (
-          <div className="sidebar-history-group">
-            <div className="sidebar-section-label">Yesterday</div>
-            {groups.yesterday.map((s) => (
-              <SessionItem
-                key={s.id}
-                session={s}
-                active={s.id === currentSessionId}
-                onSelect={() => onSelectSession(s.id)}
-                onDelete={() => onDeleteSession(s.id)}
-                onRename={(title) => onRenameSession(s.id, title)}
-              />
-            ))}
+      {/* User section at bottom */}
+      {user && (
+        <div className="sidebar-user">
+          <div className="sidebar-user-avatar">
+            {user.username?.[0]?.toUpperCase() || "U"}
           </div>
-        )}
-
-        {groups.older.length > 0 && (
-          <div className="sidebar-history-group">
-            <div className="sidebar-section-label">Previous</div>
-            {groups.older.map((s) => (
-              <SessionItem
-                key={s.id}
-                session={s}
-                active={s.id === currentSessionId}
-                onSelect={() => onSelectSession(s.id)}
-                onDelete={() => onDeleteSession(s.id)}
-                onRename={(title) => onRenameSession(s.id, title)}
-              />
-            ))}
+          <div className="sidebar-user-info">
+            <span className="sidebar-user-name">{user.username}</span>
+            <span className="sidebar-user-email">{user.email}</span>
           </div>
-        )}
-
-        {(!sessions || sessions.length === 0) && (
-          <div style={{ padding: "12px 8px", color: "var(--text-tertiary)", fontSize: 12 }}>
-            No conversations yet
+          <div className="sidebar-user-actions">
+            {user.is_admin && (
+              <button className="sidebar-admin-btn" onClick={onShowAdmin} title="Admin Dashboard">
+                <Settings size={14} />
+              </button>
+            )}
+            <button className="sidebar-user-logout" onClick={onLogout} title="Sign out">
+              <LogOut size={14} />
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </aside>
   );
 }

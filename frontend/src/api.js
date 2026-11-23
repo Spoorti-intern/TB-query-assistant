@@ -2,7 +2,10 @@
 import axios from "axios";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8031";
+  import.meta.env.VITE_API_URL ||
+  (window.location.hostname !== "localhost"
+    ? "https://tb-query-assistant-tydh-iota.vercel.app"
+    : "http://127.0.0.1:8101");
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -11,6 +14,105 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+// Attach JWT token to every request if available
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("qops_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// ==============================
+// AUTH APIs
+// ==============================
+
+export const registerUser = async ({ email, username, password }) => {
+  const response = await api.post("/api/auth/register", { email, username, password });
+  return response.data;
+};
+
+export const loginUser = async ({ email, password }) => {
+  const response = await api.post("/api/auth/login", { email, password });
+  return response.data;
+};
+
+export const sendOTP = async ({ email, username, password }) => {
+  const response = await api.post("/api/auth/send-otp", { email, username, password });
+  return response.data;
+};
+
+export const verifyOTP = async ({ email, username, password, otp }) => {
+  const response = await api.post("/api/auth/verify-otp", { email, username, password, otp });
+  return response.data;
+};
+
+export const sendLoginOTP = async ({ email, password }) => {
+  const response = await api.post("/api/auth/send-login-otp", { email, password });
+  return response.data;
+};
+
+export const verifyLoginOTP = async ({ email, password, otp }) => {
+  const response = await api.post("/api/auth/verify-login-otp", { email, password, otp });
+  return response.data;
+};
+
+export const getMe = async () => {
+  const response = await api.get("/api/auth/me");
+  return response.data;
+};
+
+// ==============================
+// PAYMENT APIs
+// ==============================
+
+export const processPayment = async (paymentData) => {
+  const response = await api.post("/api/payments/process", paymentData);
+  return response.data;
+};
+
+export const getPaymentHistory = async () => {
+  const response = await api.get("/api/payments/history");
+  return response.data;
+};
+
+export const getCredits = async () => {
+  const response = await api.get("/api/payments/credits");
+  return response.data;
+};
+
+export const useCredit = async () => {
+  const response = await api.post("/api/payments/use-credit");
+  return response.data;
+};
+
+// ==============================
+// ADMIN APIs
+// ==============================
+
+export const getAdminUsers = async () => {
+  const response = await api.get("/api/admin/users");
+  return response.data;
+};
+
+export const getAdminTransactions = async () => {
+  const response = await api.get("/api/admin/transactions");
+  return response.data;
+};
+
+export const getAdminStats = async () => {
+  const response = await api.get("/api/admin/stats");
+  return response.data;
+};
+
+export const allocateCredits = async (userId, credits) => {
+  const response = await api.post("/api/admin/allocate-credits", {
+    user_id: userId,
+    credits,
+  });
+  return response.data;
+};
 
 // ==============================
 // CONNECTOR APIs

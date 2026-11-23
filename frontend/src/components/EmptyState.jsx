@@ -74,7 +74,7 @@ export default function EmptyState({ onSuggestion, tableNames = [] }) {
       <div className="empty-logo">
         <Database size={26} />
       </div>
-      <h1 className="empty-title">TB Query Assistant</h1>
+      <h1 className="empty-title">Query Ops</h1>
       <p className="empty-subtitle">
         Ask me about your database — queries, tables, columns, rows, schema, or any data question.
       </p>

@@ -450,7 +450,7 @@ def _build_system_prompt(db: Session, connector_id: str | None = None) -> str:
     cid = connector_id or "null"
     schema_ctx = _get_schema_context(connector_id) if connector_id else ""
 
-    return f"""You are TB Query Assistant — a fast, action-oriented database expert and general assistant.
+    return f"""You are Query Ops — a fast, action-oriented database expert and general assistant.
 
 ## Databases
 {conn_block}
@@ -495,7 +495,7 @@ You are EXCLUSIVELY a database query assistant. You ONLY answer questions relate
 - Data analysis on connected databases
 
 If the user asks about ANYTHING else (coding, math, general knowledge, programming languages, advice, chat, etc.), respond with:
-"I'm TB Query Assistant — I only help with database queries, tables, columns, and data questions. Please ask me something about your database!"
+"I'm Query Ops — I only help with database queries, tables, columns, and data questions. Please ask me something about your database!"
 
 NEVER answer general questions, write code in programming languages, do math, or engage in casual conversation.
 
@@ -925,7 +925,7 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
     # ── PRE-FILTER: Reject non-database questions immediately ──
     detected_uri = _detect_connection_string(request.message)
     if not detected_uri and not _is_database_question(request.message):
-        yield _sse({"type": "content", "content": "I'm **TB Query Assistant** — I only help with database queries, tables, columns, rows, schemas, and data questions.\n\nPlease ask me something about your database! For example:\n- \"Show me all tables\"\n- \"How many rows in customers?\"\n- \"Find orders from last month\""})
+        yield _sse({"type": "content", "content": "I'm **Query Ops** — I only help with database queries, tables, columns, rows, schemas, and data questions.\n\nPlease ask me something about your database! For example:\n- \"Show me all tables\"\n- \"How many rows in customers?\"\n- \"Find orders from last month\""})
         yield _sse({"type": "done"})
         return
 

@@ -1,0 +1,4 @@
+Frontend: React 19 + Vite, Axios, Lucide Icons, React Markdown
+Backend: FastAPI + SQLAlchemy, Groq AI + OpenAI-compatible LLM
+Databases: PostgreSQL (app metadata), supports 16+ connector types
+Infra: Docker Compose (Postgres), Vercel deployment-ready

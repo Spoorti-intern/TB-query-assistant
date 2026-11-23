@@ -274,7 +274,7 @@ def general_chat_response(message: str) -> str:
     """Generate a conversational AI response for non-database questions."""
     client = get_llm_client()
 
-    system_prompt = """You are TB Query Assistant, an AI-powered database query assistant.
+    system_prompt = """You are Query Ops, an AI-powered database query assistant.
 You help users connect databases (PostgreSQL, MySQL, MongoDB, Supabase) and query them using natural language.
 
 When users ask general questions (not about databases), respond helpfully and naturally.
@@ -306,7 +306,7 @@ Always be helpful and conversational."""
         answer = response.choices[0].message.content
         return answer.strip() if answer else "I'm here to help you query your databases! Try asking a question about your data."
     except Exception:
-        return "I'm TB Query Assistant — I help you query databases. Connect a database and ask me anything about your data!"
+        return "I'm Query Ops — I help you query databases. Connect a database and ask me anything about your data!"
 
 
 # --------------------------------------------------

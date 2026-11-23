@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Bot, Send, User, Loader, Plus, RefreshCw, CheckCircle2, AlertCircle, Brain, Database, Search, Zap, Link2, Shield, Paperclip, Image, FileText, Link, FileCode } from "lucide-react";
+import { Bot, Send, User, Loader, Plus, RefreshCw, CheckCircle2, AlertCircle, Brain, Database, Search, Zap, Link2, Shield, Paperclip, Image, FileText, Link, FileCode, ArrowRight, Crown, CreditCard } from "lucide-react";
 import { streamAgentChat } from "../api";
 import { toast } from "../components/Toast";
 import EmptyState from "../components/EmptyState";
@@ -17,6 +17,10 @@ export default function ChatPage({
   onFirstMessage,
   tableNames = [],
   onDetectReason,
+  credits = 0,
+  hasPaid = false,
+  onUseCredit,
+  onUpgrade,
 }) {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -56,6 +60,20 @@ export default function ChatPage({
   const handleSend = async (text) => {
     text = (text || input).trim();
     if (!text || isStreaming || sendingRef.current) return;
+
+    // Check credits before sending
+    if (credits <= 0) {
+      // Show payment wall
+      if (onUpgrade) onUpgrade();
+      return;
+    }
+
+    // Use a credit
+    if (onUseCredit) {
+      const allowed = await onUseCredit();
+      if (!allowed) return;
+    }
+
     sendingRef.current = true;
 
     setInput("");
@@ -103,7 +121,7 @@ export default function ChatPage({
                 const existingIdx = steps.findIndex(s => s.step === event.step);
                 const stepData = {
                   step: event.step,
-                  label: event.label || event.content || "Processing…",
+                  label: event.label || event.content || "Processing\u2026",
                   description: event.description || "",
                   phase: event.phase || "running",
                   tool: event.tool || "",
@@ -124,7 +142,6 @@ export default function ChatPage({
               }
 
               case "connector_detected":
-                // Auto-detected which database to use
                 if (event.connector_id && onSelectConnector) {
                   onSelectConnector(event.connector_id);
                 }
@@ -213,7 +230,7 @@ export default function ChatPage({
           const content = ev.target.result;
           setInput((prev) => (prev ? prev + "\n\n" : "") + `--- File: ${file.name} ---\n${content}`);
           inputRef.current?.focus();
-          toast.info(`"${file.name}" attached — send to analyze.`);
+          toast.info(`"${file.name}" attached \u2014 send to analyze.`);
         };
         reader.readAsText(file);
       }
@@ -234,7 +251,7 @@ export default function ChatPage({
           const content = ev.target.result;
           setInput((prev) => (prev ? prev + "\n\n" : "") + `--- Config: ${file.name} ---\n${content}`);
           inputRef.current?.focus();
-          toast.info(`"${file.name}" attached — connection details will be extracted.`);
+          toast.info(`"${file.name}" attached \u2014 connection details will be extracted.`);
         };
         reader.readAsText(file);
       }
@@ -250,7 +267,7 @@ export default function ChatPage({
     inp.onchange = (e) => {
       const file = e.target.files[0];
       if (file) {
-        toast.info(`Image "${file.name}" selected — describe what you need.`);
+        toast.info(`Image "${file.name}" selected \u2014 describe what you need.`);
       }
     };
     inp.click();
@@ -262,14 +279,13 @@ export default function ChatPage({
     if (link?.trim()) {
       const detectedType = detectDbTypeFromLink(link.trim());
       if (detectedType) {
-        toast.info(`Detected ${detectedType.toUpperCase()} connection — send to connect.`);
+        toast.info(`Detected ${detectedType.toUpperCase()} connection \u2014 send to connect.`);
       }
       setInput((prev) => (prev ? prev + "\n" : "") + link.trim());
       inputRef.current?.focus();
     }
   };
 
-  // Detect database type from a connection string/URL
   function detectDbTypeFromLink(text) {
     const patterns = [
       { type: "PostgreSQL", re: /postgres(ql)?:\/\//i },
@@ -293,6 +309,7 @@ export default function ChatPage({
   }
 
   const hasMessages = messages.length > 0;
+  const noCredits = credits <= 0;
 
   return (
     <div className="chat-container">
@@ -413,72 +430,91 @@ export default function ChatPage({
       )}
 
       <div className="composer-wrapper">
-        <div className="composer">
-          {/* Attach menu (files, images, links) */}
-          <div className="attach-menu-wrapper" ref={attachRef}>
-            <button
-              className="composer-btn"
-              onClick={() => setAttachMenuOpen(!attachMenuOpen)}
-              title="Attach file, image, or link"
-            >
-              <Plus size={18} />
+        {/* No credits — show upgrade CTA */}
+        {noCredits ? (
+          <div className="credits-composer-cta">
+            <div className="credits-cta-icon">
+              <Crown size={20} />
+            </div>
+            <p>You&apos;ve used all your credits. Purchase more to continue querying your databases.</p>
+            <button onClick={onUpgrade}>
+              <CreditCard size={14} /> Buy Credits <ArrowRight size={14} />
             </button>
+          </div>
+        ) : (
+          <>
+            <div className="composer">
+              {/* Attach menu */}
+              <div className="attach-menu-wrapper" ref={attachRef}>
+                <button
+                  className="composer-btn"
+                  onClick={() => setAttachMenuOpen(!attachMenuOpen)}
+                  title="Attach file, image, or link"
+                >
+                  <Plus size={18} />
+                </button>
 
-            {attachMenuOpen && (
-              <div className="attach-menu">
-                <button className="attach-menu-item" onClick={handleAttachFile}>
-                  <FileText size={14} />
-                  <span>Query / Data File</span>
-                  <span className="attach-menu-hint">.sql, .csv, .json</span>
-                </button>
-                <button className="attach-menu-item" onClick={handleAttachEnvFile}>
-                  <FileCode size={14} />
-                  <span>Config / .env File</span>
-                  <span className="attach-menu-hint">.env, .ini, .toml</span>
-                </button>
-                <button className="attach-menu-item" onClick={handleAttachImage}>
-                  <Image size={14} />
-                  <span>Image / Screenshot</span>
-                  <span className="attach-menu-hint">Schema diagram, ERD</span>
-                </button>
-                <button className="attach-menu-item" onClick={handleAttachLink}>
-                  <Link size={14} />
-                  <span>Paste Link / URL</span>
-                  <span className="attach-menu-hint">DB URL, connection string</span>
+                {attachMenuOpen && (
+                  <div className="attach-menu">
+                    <button className="attach-menu-item" onClick={handleAttachFile}>
+                      <FileText size={14} />
+                      <span>Query / Data File</span>
+                      <span className="attach-menu-hint">.sql, .csv, .json</span>
+                    </button>
+                    <button className="attach-menu-item" onClick={handleAttachEnvFile}>
+                      <FileCode size={14} />
+                      <span>Config / .env File</span>
+                      <span className="attach-menu-hint">.env, .ini, .toml</span>
+                    </button>
+                    <button className="attach-menu-item" onClick={handleAttachImage}>
+                      <Image size={14} />
+                      <span>Image / Screenshot</span>
+                      <span className="attach-menu-hint">Schema diagram, ERD</span>
+                    </button>
+                    <button className="attach-menu-item" onClick={handleAttachLink}>
+                      <Link size={14} />
+                      <span>Paste Link / URL</span>
+                      <span className="attach-menu-hint">DB URL, connection string</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about your database \u2014 tables, queries, columns, rows..."
+                disabled={isStreaming}
+                rows={1}
+              />
+              <div className="composer-actions">
+                <button
+                  className="composer-send"
+                  onClick={() => handleSend()}
+                  disabled={isStreaming || !input.trim()}
+                >
+                  {isStreaming ? (
+                    <Loader size={16} className="spin" />
+                  ) : (
+                    <Send size={16} />
+                  )}
                 </button>
               </div>
-            )}
-          </div>
-
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about your database — tables, queries, columns, rows..."
-            disabled={isStreaming}
-            rows={1}
-          />
-          <div className="composer-actions">
-            <button
-              className="composer-send"
-              onClick={() => handleSend()}
-              disabled={isStreaming || !input.trim()}
-            >
-              {isStreaming ? (
-                <Loader size={16} className="spin" />
-              ) : (
-                <Send size={16} />
-              )}
-            </button>
-          </div>
-        </div>
-        <div className="composer-footer">
-          <span className="composer-footer-ro">
-            <Shield size={10} />
-            Read-only queries
-          </span>
-        </div>
+            </div>
+            <div className="composer-footer">
+              <span className="composer-footer-credits">
+                <CreditCard size={10} />
+                {credits} {credits === 1 ? "credit" : "credits"} remaining
+              </span>
+              <span className="composer-footer-ro">
+                <Shield size={10} />
+                Read-only queries
+              </span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -11,8 +11,16 @@ from app.api.mongodb_queries import router as mongodb_queries_router
 from app.api.chat import router as chat_router
 from app.api.agent import router as agent_router
 from app.api.chat_sessions import router as sessions_router
+from app.api.auth import router as auth_router
+from app.api.payments import router as payments_router
+from app.api.admin import router as admin_router
+from app.database import Base, engine
+from app.models.user import User, Payment  # noqa: F401
 
 load_dotenv()
+
+# Auto-create tables on startup
+Base.metadata.create_all(bind=engine)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,9 +28,9 @@ logging.basicConfig(
 )
 
 app = FastAPI(
-    title="TB Query Assistant API",
-    description="Backend API for the TB Query Assistant",
-    version="1.2.0"
+    title="Query Ops API",
+    description="Backend API for Query Ops",
+    version="1.3.0"
 )
 
 # CORS CONFIGURATION
@@ -49,6 +57,9 @@ app.add_middleware(
 
 
 # REGISTER API ROUTERS
+app.include_router(auth_router)
+app.include_router(payments_router)
+app.include_router(admin_router)
 app.include_router(connectors_router)
 app.include_router(queries_router)
 app.include_router(mongodb_queries_router)
@@ -61,7 +72,7 @@ app.include_router(sessions_router)
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to TB Query Assistant API"
+        "message": "Welcome to Query Ops API"
     }
 
 
@@ -70,5 +81,5 @@ async def root():
 async def health_check():
     return {
         "status": "healthy",
-        "application": "TB Query Assistant"
+        "application": "Query Ops"
     }

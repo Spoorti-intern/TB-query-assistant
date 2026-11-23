@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Database, Zap, Menu, ArrowRight } from "lucide-react";
+import { Database, Zap, Menu, ArrowRight, LogOut } from "lucide-react";
 
 // Map connector types to display info
 const DB_TYPE_INFO = {
@@ -25,7 +25,7 @@ function getDbInfo(type) {
   return DB_TYPE_INFO[type?.toLowerCase()] || { label: type || "Database", color: "#666" };
 }
 
-export default function Topbar({ title, onToggleSidebar, activeConnector, detectReason }) {
+export default function Topbar({ title, onToggleSidebar, activeConnector, detectReason, user, onLogout }) {
   const dbInfo = activeConnector ? getDbInfo(activeConnector.connector_type) : null;
   const isConnected = activeConnector?.status === "connected";
   const [flash, setFlash] = useState(false);
@@ -90,6 +90,17 @@ export default function Topbar({ title, onToggleSidebar, activeConnector, detect
           <Zap size={12} />
           AI Agent
         </div>
+
+        {user && (
+          <div className="topbar-user">
+            <span className="topbar-user-avatar">
+              {user.username?.[0]?.toUpperCase() || "U"}
+            </span>
+            <button className="topbar-logout" onClick={onLogout} title="Sign out">
+              <LogOut size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

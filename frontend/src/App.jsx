@@ -1,15 +1,261 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { getConnectors, getConnectorSchema, getSessions, createSession, deleteSession, getSession, updateSession, generateSessionTitle, testConnector } from "./api";
+import { getConnectors, getConnectorSchema, getSessions, createSession, deleteSession, getSession, updateSession, generateSessionTitle, testConnector, getMe, useCredit, getCredits } from "./api";
+import { Database, CreditCard, ArrowRight, X, Sparkles, Crown, PartyPopper } from "lucide-react";
 
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import ToastContainer from "./components/Toast";
 import ConnectorModal from "./components/ConnectorModal";
 import ChatPage from "./pages/ChatPage";
+import LoginPage from "./pages/LoginPage";
+import LandingPage from "./pages/LandingPage";
+import PaymentPage from "./pages/PaymentPage";
+import AdminPage from "./pages/AdminPage";
 
 import "./App.css";
 
+function PaymentWallModal({ onUpgrade, onDismiss }) {
+  return (
+    <div className="payment-wall-overlay" onClick={onDismiss}>
+      <div className="payment-wall-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="payment-wall-close" onClick={onDismiss}>
+          <X size={16} />
+        </button>
+
+        <div className="payment-wall-icon">
+          <Crown size={32} />
+        </div>
+
+        <h2>Upgrade to Pro</h2>
+        <p>
+          You&apos;ve used your 2 free queries. Upgrade to Pro to unlock
+          unlimited database queries and full chat history.
+        </p>
+
+        <div className="payment-wall-price">
+          <span className="payment-wall-amount">$9.99</span>
+          <span className="payment-wall-period">/ 50 credits</span>
+        </div>
+
+        <div className="payment-wall-features">
+          <div className="payment-wall-feature">
+            <Sparkles size={13} />
+            50 query credits
+          </div>
+          <div className="payment-wall-feature">
+            <Database size={13} />
+            Full chat history
+          </div>
+          <div className="payment-wall-feature">
+            <CreditCard size={13} />
+            Secure payment
+          </div>
+        </div>
+
+        <button className="payment-wall-btn" onClick={onUpgrade}>
+          Upgrade Now <ArrowRight size={14} />
+        </button>
+
+        <button className="payment-wall-dismiss" onClick={onDismiss}>
+          Maybe later
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WelcomeGreeting({ user, onDismiss }) {
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setVisible(false);
+      setTimeout(onDismiss, 500);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [onDismiss]);
+
+  const hour = new Date().getHours();
+  let timeGreeting = "Good evening";
+  if (hour < 12) timeGreeting = "Good morning";
+  else if (hour < 17) timeGreeting = "Good afternoon";
+
+  return (
+    <div className={`welcome-overlay ${visible ? "welcome-visible" : "welcome-hidden"}`}>
+      <div className="welcome-content">
+        <div className="welcome-icon">
+          <PartyPopper size={40} />
+        </div>
+        <h1 className="welcome-title">{timeGreeting},</h1>
+        <h2 className="welcome-name">{user?.username || "there"}!</h2>
+        <p className="welcome-subtitle">Welcome to Query Ops. Let&apos;s build something amazing.</p>
+        <div className="welcome-dots">
+          <span className="welcome-dot welcome-dot-1" />
+          <span className="welcome-dot welcome-dot-2" />
+          <span className="welcome-dot welcome-dot-3" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
+  // Auth state
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showLogin, setShowLogin] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  // Payment state
+  const [showPayment, setShowPayment] = useState(false);
+  const [showPaymentWall, setShowPaymentWall] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [credits, setCredits] = useState(2);
+  const [hasPaid, setHasPaid] = useState(false);
+
+  // Check for existing token on mount
+  useEffect(() => {
+    const token = localStorage.getItem("qops_token");
+    if (token) {
+      getMe()
+        .then((userData) => {
+          setUser(userData);
+          setCredits(userData.credits ?? 2);
+          setHasPaid(userData.has_paid ?? false);
+          setAuthLoading(false);
+        })
+        .catch(() => {
+          localStorage.removeItem("qops_token");
+          localStorage.removeItem("qops_user");
+          setAuthLoading(false);
+        });
+    } else {
+      setAuthLoading(false);
+    }
+  }, []);
+
+  const handleLogin = (result) => {
+    localStorage.setItem("qops_token", result.access_token);
+    localStorage.setItem("qops_user", JSON.stringify(result.user));
+    setUser(result.user);
+    setCredits(result.user.credits ?? 2);
+    setHasPaid(result.user.has_paid ?? false);
+    setShowLogin(false);
+    setShowWelcome(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("qops_token");
+    localStorage.removeItem("qops_user");
+    setUser(null);
+    setShowLogin(false);
+    setShowPayment(false);
+    setShowAdmin(false);
+  };
+
+  const handleUseCredit = async () => {
+    try {
+      const result = await useCredit();
+      setCredits(result.credits);
+      setHasPaid(result.has_paid);
+      return true;
+    } catch {
+      // No credits left — show payment wall
+      setShowPaymentWall(true);
+      return false;
+    }
+  };
+
+  const handlePaymentSuccess = (paymentResult) => {
+    // Update credits after payment
+    setCredits((prev) => prev + (paymentResult.credits_added || 50));
+    setHasPaid(true);
+    setShowPayment(false);
+    // Refresh user data
+    getMe().then((userData) => {
+      setUser(userData);
+      setCredits(userData.credits);
+      setHasPaid(userData.has_paid);
+    }).catch(() => {});
+  };
+
+  const handleGoToPayment = () => {
+    setShowPaymentWall(false);
+    setShowPayment(true);
+  };
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="auth-loading">
+        <div className="auth-loading-spinner" />
+      </div>
+    );
+  }
+
+  // Show landing page if not logged in
+  if (!user && !showLogin) {
+    return (
+      <LandingPage onGetStarted={() => setShowLogin(true)} />
+    );
+  }
+
+  // Show login/register
+  if (!user && showLogin) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
+  // Show payment page
+  if (showPayment) {
+    return (
+      <PaymentPage
+        user={user}
+        onSuccess={handlePaymentSuccess}
+        onBack={() => setShowPayment(false)}
+      />
+    );
+  }
+
+  // Show admin page
+  if (showAdmin) {
+    return (
+      <AdminPage
+        user={user}
+        onBack={() => setShowAdmin(false)}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // Logged in — show the app
+  return (
+    <>
+      {showWelcome && (
+        <WelcomeGreeting
+          user={user}
+          onDismiss={() => setShowWelcome(false)}
+        />
+      )}
+      <AppShell
+        user={user}
+        onLogout={handleLogout}
+        credits={credits}
+        hasPaid={hasPaid}
+        onUseCredit={handleUseCredit}
+        onUpgrade={() => setShowPayment(true)}
+        onShowAdmin={() => setShowAdmin(true)}
+      />
+      {showPaymentWall && (
+        <PaymentWallModal
+          onUpgrade={handleGoToPayment}
+          onDismiss={() => setShowPaymentWall(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function AppShell({ user, onLogout, credits, hasPaid, onUseCredit, onUpgrade, onShowAdmin }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [connectors, setConnectors] = useState([]);
   const [selectedConnectorId, setSelectedConnectorId] = useState("");
@@ -39,12 +285,10 @@ function App() {
     const toTest = connectorList.filter((c) => c.status !== "connected");
     if (toTest.length === 0) return;
 
-    // Mark all as testing
     const testingMap = {};
     toTest.forEach((c) => { testingMap[c.id] = true; });
     setTestingConnectors(testingMap);
 
-    // Test in parallel
     const results = await Promise.allSettled(
       toTest.map(async (c) => {
         try {
@@ -58,7 +302,6 @@ function App() {
       })
     );
 
-    // Update connector statuses locally
     setConnectors((prev) =>
       prev.map((c) => {
         const result = results.find(
@@ -86,7 +329,6 @@ function App() {
     const init = async () => {
       const data = await fetchConnectors();
       fetchSessions();
-      // Auto-test all connectors on load
       if (data.length > 0) {
         autoTestConnectors(data);
       }
@@ -184,13 +426,11 @@ function App() {
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, currentSessionId]);
 
-  // New chat
   const handleNewChat = () => {
     setCurrentSessionId(null);
     setMessages([]);
   };
 
-  // Select a session
   const handleSelectSession = async (sessionId) => {
     setCurrentSessionId(sessionId);
     try {
@@ -218,7 +458,6 @@ function App() {
     }
   };
 
-  // Delete a session
   const handleDeleteSession = async (sessionId) => {
     try {
       await deleteSession(sessionId);
@@ -232,7 +471,6 @@ function App() {
     }
   };
 
-  // Called when user sends first message in a new chat
   const handleFirstMessage = async (text) => {
     try {
       const title = text.length > 40 ? text.slice(0, 40) + "..." : text;
@@ -244,7 +482,6 @@ function App() {
     }
   };
 
-  // Rename a session
   const handleRenameSession = async (sessionId, newTitle) => {
     try {
       await updateSession(sessionId, { title: newTitle });
@@ -277,6 +514,12 @@ function App() {
         onSelectConnector={(id) => setSelectedConnectorId(id)}
         onAddConnection={() => setConnectorModalOpen(true)}
         testingConnectors={testingConnectors}
+        user={user}
+        onLogout={onLogout}
+        credits={credits}
+        hasPaid={hasPaid}
+        onUpgrade={onUpgrade}
+        onShowAdmin={onShowAdmin}
       />
 
       {/* Mobile backdrop */}
@@ -294,6 +537,8 @@ function App() {
           onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
           activeConnector={connectors.find((c) => String(c.id) === String(selectedConnectorId))}
           detectReason={detectReason}
+          user={user}
+          onLogout={onLogout}
         />
 
         <ChatPage
@@ -306,6 +551,10 @@ function App() {
           onFirstMessage={handleFirstMessage}
           tableNames={tableNames}
           onDetectReason={setDetectReason}
+          credits={credits}
+          hasPaid={hasPaid}
+          onUseCredit={onUseCredit}
+          onUpgrade={onUpgrade}
         />
       </main>
 

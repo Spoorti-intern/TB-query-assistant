@@ -127,16 +127,9 @@ export default function LoginPage({ onLogin }) {
     setError("");
     setLoading(true);
     try {
-      await verifyOTP({ email, username, password, otp: otpCode });
-      // Registration successful — switch to login with email pre-filled
-      const registeredEmail = email;
-      setOtpStep(false);
-      setIsRegister(false);
-      setOtp(["", "", "", "", "", ""]);
-      setPassword("");
-      setUsername("");
-      setEmail(registeredEmail); // Auto-fill email in login form
-      setSuccessMessage("Account created! Sign in with your credentials.");
+      const result = await verifyOTP({ email, username, password, otp: otpCode });
+      // Registration successful — log the user in directly
+      onLogin(result);
     } catch (err) {
       if (!err.response) {
         setErrorType("network");

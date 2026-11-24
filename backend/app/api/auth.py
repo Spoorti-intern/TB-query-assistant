@@ -32,12 +32,12 @@ async def send_otp(data: OTPSendRequest, db: Session = Depends(get_db)):
 
     code = generate_otp()
     store_otp(data.email, code)
-    email_sent = send_otp_email(data.email, code)
+    email_sent, error_reason = send_otp_email(data.email, code)
 
     if not email_sent:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send OTP email. Please check SMTP configuration."
+            detail=f"Failed to send OTP email. {error_reason}"
         )
 
     return OTPSendResponse(
@@ -150,12 +150,12 @@ async def send_login_otp(data: LoginOTPSendRequest, db: Session = Depends(get_db
 
     code = generate_otp()
     store_otp(data.email, code)
-    email_sent = send_otp_email(data.email, code)
+    email_sent, error_reason = send_otp_email(data.email, code)
 
     if not email_sent:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send OTP email. Please check SMTP configuration."
+            detail=f"Failed to send OTP email. {error_reason}"
         )
 
     return OTPSendResponse(
@@ -190,3 +190,20 @@ async def verify_login_otp(data: LoginOTPVerifyRequest, db: Session = Depends(ge
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
     return UserResponse.model_validate(current_user)
+
+
+@router.get("/smtp-check")
+async def smtp_check():
+    """Debug endpoint to check if SMTP env vars are loaded."""
+    import os
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = os.getenv("SMTP_PORT", "587")
+    return {
+        "smtp_host": smtp_host,
+        "smtp_port": smtp_port,
+        "smtp_user_set": bool(smtp_user),
+        "smtp_pass_set": bool(smtp_pass),
+        "smtp_user_preview": smtp_user[:3] + "***" if smtp_user else "(empty)",
+    }

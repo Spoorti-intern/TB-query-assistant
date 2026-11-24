@@ -40,7 +40,8 @@ def verify_otp(email: str, code: str) -> bool:
     return True
 
 
-def send_otp_email(to_email: str, otp_code: str) -> bool:
+def send_otp_email(to_email: str, otp_code: str) -> tuple[bool, str]:
+    """Send OTP email. Returns (success, error_reason)."""
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER", "")
@@ -48,8 +49,8 @@ def send_otp_email(to_email: str, otp_code: str) -> bool:
     from_email = os.getenv("SMTP_FROM", smtp_user)
 
     if not smtp_user or not smtp_pass:
-        logger.warning("SMTP not configured — OTP will not be emailed. Code: %s", otp_code)
-        return False
+        logger.warning("SMTP not configured — SMTP_USER or SMTP_PASS is empty. OTP code: %s", otp_code)
+        return False, "SMTP credentials not configured. Set SMTP_USER and SMTP_PASS environment variables."
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"Query Ops — Your verification code: {otp_code}"
@@ -75,12 +76,22 @@ def send_otp_email(to_email: str, otp_code: str) -> bool:
     msg.attach(MIMEText(html, "html"))
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
+        logger.info("Connecting to SMTP %s:%s as %s ...", smtp_host, smtp_port, smtp_user)
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
             server.starttls()
             server.login(smtp_user, smtp_pass)
             server.sendmail(from_email, to_email, msg.as_string())
         logger.info("OTP email sent to %s", to_email)
-        return True
+        return True, ""
+    except smtplib.SMTPAuthenticationError as e:
+        reason = f"SMTP login failed — check SMTP_USER/SMTP_PASS. Gmail requires an App Password. ({e})"
+        logger.error(reason)
+        return False, reason
+    except (ConnectionRefusedError, OSError, TimeoutError) as e:
+        reason = f"Cannot connect to {smtp_host}:{smtp_port} — SMTP port may be blocked by hosting provider. ({e})"
+        logger.error(reason)
+        return False, reason
     except Exception as e:
+        reason = f"SMTP error: {e}"
         logger.error("Failed to send OTP email: %s", e)
-        return False
+        return False, reason

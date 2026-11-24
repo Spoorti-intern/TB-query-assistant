@@ -17,7 +17,9 @@ from sqlglot import exp
 
 from app.database import get_db
 from app.models.connector import Connector
+from app.models.user import User
 from app.core.connector_manager import get_connector_engine
+from app.core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -628,10 +630,12 @@ def run_read_only_query(
 def execute_query(
     connector_id: str,
     request: QueryRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     connector = db.query(Connector).filter(
-        Connector.id == connector_id
+        Connector.id == connector_id,
+        Connector.user_id == str(current_user.id),
     ).first()
 
     if not connector:
@@ -705,10 +709,12 @@ def execute_query(
 def ask_database(
     connector_id: str,
     request: AskRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     connector = db.query(Connector).filter(
-        Connector.id == connector_id
+        Connector.id == connector_id,
+        Connector.user_id == str(current_user.id),
     ).first()
 
     if not connector:

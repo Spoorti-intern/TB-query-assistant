@@ -4,6 +4,7 @@ from sqlalchemy import text
 
 from app.database import get_db
 from app.models.connector import Connector
+from app.models.user import User
 from app.schemas.connector import ConnectorConfig, ConnectorResponse
 
 from app.core.connector_manager import get_connector_engine
@@ -12,6 +13,7 @@ from app.core.mongodb_adapter import test_mongodb_connection
 from app.core.mongodb_schema_manager import discover_mongodb_schema
 from app.core.crypto import encrypt_password
 from app.core import nosql_adapters
+from app.core.auth import get_current_user
 
 
 router = APIRouter(
@@ -28,7 +30,8 @@ router = APIRouter(
 )
 def create_connector(
     connector_data: ConnectorConfig,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     data = connector_data.model_dump()
     if data.get("password"):
@@ -36,7 +39,8 @@ def create_connector(
 
     new_connector = Connector(
         **data,
-        status="configured"
+        status="configured",
+        user_id=str(current_user.id),
     )
 
     try:
@@ -56,18 +60,23 @@ def create_connector(
 
 # GET ALL CONNECTORS
 @router.get("/", response_model=list[ConnectorResponse])
-def get_connectors(db: Session = Depends(get_db)):
-    return db.query(Connector).all()
+def get_connectors(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return db.query(Connector).filter(Connector.user_id == str(current_user.id)).all()
 
 
 # TEST DATABASE CONNECTION
 @router.post("/{connector_id}/test")
 def test_connector_connection(
     connector_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     connector = db.query(Connector).filter(
-        Connector.id == connector_id
+        Connector.id == connector_id,
+        Connector.user_id == str(current_user.id),
     ).first()
 
     if not connector:
@@ -210,10 +219,12 @@ def test_connector_connection(
 @router.get("/{connector_id}/schema")
 def get_connector_schema(
     connector_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     connector = db.query(Connector).filter(
-        Connector.id == connector_id
+        Connector.id == connector_id,
+        Connector.user_id == str(current_user.id),
     ).first()
 
     if not connector:
@@ -309,10 +320,12 @@ def get_connector_schema(
 )
 def get_connector(
     connector_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     connector = db.query(Connector).filter(
-        Connector.id == connector_id
+        Connector.id == connector_id,
+        Connector.user_id == str(current_user.id),
     ).first()
 
     if not connector:
@@ -328,10 +341,12 @@ def get_connector(
 @router.delete("/{connector_id}")
 def delete_connector(
     connector_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     connector = db.query(Connector).filter(
-        Connector.id == connector_id
+        Connector.id == connector_id,
+        Connector.user_id == str(current_user.id),
     ).first()
 
     if not connector:

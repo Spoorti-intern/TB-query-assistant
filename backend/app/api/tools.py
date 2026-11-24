@@ -56,7 +56,7 @@ def _get_sql_dialect(connector_type: str) -> str:
     return mapping.get(connector_type, "postgresql")
 
 
-def _get_connector(db: Session, connector_id) -> "Connector | None":
+def _get_connector(db: Session, connector_id, user_id: str = None) -> "Connector | None":
     """Fetch a connector by ID with fuzzy matching.
 
     The AI model sometimes:
@@ -66,18 +66,24 @@ def _get_connector(db: Session, connector_id) -> "Connector | None":
     """
     cid = str(connector_id).strip()
 
+    def _base_q():
+        q = db.query(Connector)
+        if user_id:
+            q = q.filter(Connector.user_id == user_id)
+        return q
+
     # Try exact match first
-    result = db.query(Connector).filter(Connector.id == cid).first()
+    result = _base_q().filter(Connector.id == cid).first()
     if result:
         return result
 
     # Try prefix match (AI often truncates UUIDs)
-    result = db.query(Connector).filter(Connector.id.like(f"{cid}%")).first()
+    result = _base_q().filter(Connector.id.like(f"{cid}%")).first()
     if result:
         return result
 
     # Fuzzy match — find closest UUID (tolerates 1-3 char mutations)
-    all_connectors = db.query(Connector).all()
+    all_connectors = _base_q().all()
     if not all_connectors:
         return None
 
@@ -249,7 +255,7 @@ def _normalize_args(args: dict) -> dict:
     return normalized
 
 
-def execute_tool(tool_name: str, args: dict, db: Session) -> dict:
+def execute_tool(tool_name: str, args: dict, db: Session, user_id: str = None) -> dict:
     """Dispatch a tool call to its executor and return the result dict."""
     logger.info("execute_tool: name=%r, raw_args=%r", tool_name, args)
     # Normalize both tool name and parameter names
@@ -270,19 +276,19 @@ def execute_tool(tool_name: str, args: dict, db: Session) -> dict:
 
     try:
         if canonical == "list_connectors":
-            return _tool_list_connectors(db)
+            return _tool_list_connectors(db, user_id=user_id)
         elif canonical == "connect_database":
-            return _tool_connect_database(db, **args)
+            return _tool_connect_database(db, user_id=user_id, **args)
         elif canonical == "discover_schema":
-            return _tool_discover_schema(db, **args)
+            return _tool_discover_schema(db, user_id=user_id, **args)
         elif canonical == "query_database":
-            return _tool_query_database(db, **args)
+            return _tool_query_database(db, user_id=user_id, **args)
         elif canonical == "search_tables":
-            return _tool_search_tables(db, **args)
+            return _tool_search_tables(db, user_id=user_id, **args)
         elif canonical == "explain_query":
-            return _tool_explain_query(db, **args)
+            return _tool_explain_query(db, user_id=user_id, **args)
         elif canonical == "suggest_optimizations":
-            return _tool_suggest_optimizations(db, **args)
+            return _tool_suggest_optimizations(db, user_id=user_id, **args)
         else:
             return {"error": f"Unknown tool: {tool_name}"}
     except Exception as exc:
@@ -292,8 +298,11 @@ def execute_tool(tool_name: str, args: dict, db: Session) -> dict:
 
 # ── list_connectors ──────────────────────────
 
-def _tool_list_connectors(db: Session) -> dict:
-    connectors = db.query(Connector).all()
+def _tool_list_connectors(db: Session, user_id: str = None) -> dict:
+    q = db.query(Connector)
+    if user_id:
+        q = q.filter(Connector.user_id == user_id)
+    connectors = q.all()
     if not connectors:
         return {
             "connectors": [],
@@ -326,7 +335,7 @@ _MSSQL_SYSTEM_TABLES = {
 _MSSQL_SYSTEM_DBS = {"master", "tempdb", "model", "msdb"}
 
 
-def _tool_connect_database(db: Session, connection_string: str, name: str = None) -> dict:
+def _tool_connect_database(db: Session, connection_string: str, name: str = None, user_id: str = None) -> dict:
     parsed = _parse_connection_string(connection_string)
     if not parsed:
         return {"success": False, "error": "Could not parse connection string. Supported: postgresql://, mysql://, mariadb://, mssql://, mongodb+srv://, redis://, bolt:// (Neo4j), cassandra://, elasticsearch://, clickhouse://, influxdb://, couchdb://, oracle://, cockroachdb://, sqlite:///path"}
@@ -385,20 +394,18 @@ def _tool_connect_database(db: Session, connection_string: str, name: str = None
                 connection_string
             )
 
-    # Check duplicates
-    existing = (
-        db.query(Connector)
-        .filter(Connector.host == host, Connector.port == port, Connector.database == database)
-        .first()
-    )
+    # Check duplicates (scoped to user)
+    dup_q = db.query(Connector).filter(Connector.host == host, Connector.port == port, Connector.database == database)
+    if user_id:
+        dup_q = dup_q.filter(Connector.user_id == user_id)
+    existing = dup_q.first()
 
     # Also check if any connector on this host is stuck on a system DB — migrate it
     if db_type == "mssql" and database and database.lower() not in _MSSQL_SYSTEM_DBS:
-        stuck_connectors = (
-            db.query(Connector)
-            .filter(Connector.host == host, Connector.port == port)
-            .all()
-        )
+        stuck_q = db.query(Connector).filter(Connector.host == host, Connector.port == port)
+        if user_id:
+            stuck_q = stuck_q.filter(Connector.user_id == user_id)
+        stuck_connectors = stuck_q.all()
         for sc in stuck_connectors:
             if sc.database and sc.database.lower() in _MSSQL_SYSTEM_DBS:
                 logger.info(f"Migrating connector '{sc.name}' from '{sc.database}' to '{database}'")
@@ -430,6 +437,7 @@ def _tool_connect_database(db: Session, connection_string: str, name: str = None
         username=username,
         password=encrypted_pw,
         status="pending",
+        user_id=user_id,
     )
     db.add(connector)
     db.commit()
@@ -464,10 +472,10 @@ def _tool_connect_database(db: Session, connection_string: str, name: str = None
 
 # ── discover_schema ──────────────────────────
 
-def _tool_discover_schema(db: Session, connector_id: str = None) -> dict:
+def _tool_discover_schema(db: Session, connector_id: str = None, user_id: str = None) -> dict:
     if not connector_id or connector_id in ("null", "None", "undefined", ""):
         return {"error": "No database connected. Please select a connector first."}
-    connector = _get_connector(db, connector_id)
+    connector = _get_connector(db, connector_id, user_id=user_id)
     if not connector:
         return {"error": f"Connector '{connector_id}' not found"}
 
@@ -583,7 +591,7 @@ def _tool_discover_schema(db: Session, connector_id: str = None) -> dict:
 
 # ── query_database ───────────────────────────
 
-def _tool_query_database(db: Session, connector_id: str = None, question: str = "", sql: str = "") -> dict:
+def _tool_query_database(db: Session, connector_id: str = None, question: str = "", sql: str = "", user_id: str = None) -> dict:
     from app.core.llm_client import get_llm_client
 
     logger.info("query_database called with connector_id=%r, sql=%r, question=%r",
@@ -596,7 +604,7 @@ def _tool_query_database(db: Session, connector_id: str = None, question: str = 
     if (not sql or not sql.strip()) and (not question or not question.strip()):
         return {"error": "No question or SQL provided. Please type a question, table name, SQL query, or anything data-related."}
 
-    connector = _get_connector(db, connector_id)
+    connector = _get_connector(db, connector_id, user_id=user_id)
     if not connector:
         return {"error": f"Connector '{connector_id}' not found. Use list_connectors to see available databases."}
 
@@ -1220,10 +1228,10 @@ def _exec_nosql(connector, question: str, groq) -> dict:
 
 # ── search_tables ────────────────────────────
 
-def _tool_search_tables(db: Session, connector_id: str = None, keyword: str = "") -> dict:
+def _tool_search_tables(db: Session, connector_id: str = None, keyword: str = "", user_id: str = None) -> dict:
     if not connector_id or connector_id in ("null", "None", "undefined", ""):
         return {"error": "No database connected. Please select a connector first."}
-    connector = _get_connector(db, connector_id)
+    connector = _get_connector(db, connector_id, user_id=user_id)
     if not connector:
         return {"error": f"Connector '{connector_id}' not found"}
 
@@ -1308,10 +1316,10 @@ def _tool_search_tables(db: Session, connector_id: str = None, keyword: str = ""
 
 # ── explain_query ────────────────────────────
 
-def _tool_explain_query(db: Session, connector_id: str = None, sql: str = "") -> dict:
+def _tool_explain_query(db: Session, connector_id: str = None, sql: str = "", user_id: str = None) -> dict:
     if not connector_id or connector_id in ("null", "None", "undefined", ""):
         return {"error": "No database connected. Please select a connector first."}
-    connector = _get_connector(db, connector_id)
+    connector = _get_connector(db, connector_id, user_id=user_id)
     if not connector:
         return {"error": f"Connector '{connector_id}' not found"}
 
@@ -1374,12 +1382,12 @@ def _tool_explain_query(db: Session, connector_id: str = None, sql: str = "") ->
 
 # ── suggest_optimizations ────────────────────
 
-def _tool_suggest_optimizations(db: Session, connector_id: str = None, sql: str = "", explain_plan: str = "") -> dict:
+def _tool_suggest_optimizations(db: Session, connector_id: str = None, sql: str = "", explain_plan: str = "", user_id: str = None) -> dict:
     from app.core.llm_client import get_llm_client
 
     if not connector_id or connector_id in ("null", "None", "undefined", ""):
         return {"error": "No database connected. Please select a connector first."}
-    connector = _get_connector(db, connector_id)
+    connector = _get_connector(db, connector_id, user_id=user_id)
     if not connector:
         return {"error": f"Connector '{connector_id}' not found"}
 

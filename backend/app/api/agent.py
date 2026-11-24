@@ -20,7 +20,7 @@ import os
 import re
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from app.core.llm_client import get_llm_client
 from pydantic import BaseModel
@@ -28,6 +28,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.connector import Connector
+from app.models.user import User
+from app.core.auth import get_current_user
 
 # ──────────────────────────────────────────────
 # PERSISTENT SCHEMA CACHE  (survives restarts)
@@ -431,8 +433,11 @@ def _parse_natural_language_connection(message: str) -> str | None:
 # SYSTEM PROMPT BUILDER
 # ──────────────────────────────────────────────
 
-def _build_system_prompt(db: Session, connector_id: str | None = None) -> str:
-    connectors = db.query(Connector).all()
+def _build_system_prompt(db: Session, connector_id: str | None = None, user_id: str | None = None) -> str:
+    q = db.query(Connector)
+    if user_id:
+        q = q.filter(Connector.user_id == user_id)
+    connectors = q.all()
 
     if connectors:
         lines = []
@@ -737,12 +742,12 @@ def _format_optimization_result_markdown(result: dict) -> str:
 # ASYNC TOOL EXECUTION WITH HEARTBEAT
 # ──────────────────────────────────────────────
 
-async def _execute_tool_with_heartbeat(name, args, db, heartbeat_queue: asyncio.Queue):
+async def _execute_tool_with_heartbeat(name, args, db, heartbeat_queue: asyncio.Queue, user_id: str = None):
     """Run tool in a thread and push heartbeats every 3s while it runs."""
     loop = asyncio.get_event_loop()
 
     # Start the actual tool execution in a thread
-    tool_future = loop.run_in_executor(None, execute_tool, name, args, db)
+    tool_future = loop.run_in_executor(None, execute_tool, name, args, db, user_id)
 
     # Send heartbeats while waiting
     while True:
@@ -919,7 +924,7 @@ def _auto_detect_connector(message: str, connectors: list, current_connector_id:
     return str(connected[0].id), f"Auto-selected: {connected[0].name} ({connected[0].connector_type})"
 
 
-async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str, None]:
+async def _agent_stream(request: ChatRequest, db: Session, user_id: str | None = None) -> AsyncGenerator[str, None]:
     groq = get_llm_client(max_retries=0)
 
     # ── PRE-FILTER: Reject non-database questions immediately ──
@@ -930,7 +935,10 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
         return
 
     # ── AUTO-DETECT: Pick the right database based on query content ──
-    connectors = db.query(Connector).all()
+    q = db.query(Connector)
+    if user_id:
+        q = q.filter(Connector.user_id == user_id)
+    connectors = q.all()
     if connectors:
         detected_id, detect_reason = _auto_detect_connector(
             request.message, connectors, request.connector_id
@@ -948,7 +956,7 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
                 })
                 logger.info("Auto-detected connector: %s (%s) — %s", detected_connector.name, detected_id, detect_reason)
 
-    messages = [{"role": "system", "content": _build_system_prompt(db, request.connector_id)}]
+    messages = [{"role": "system", "content": _build_system_prompt(db, request.connector_id, user_id=user_id)}]
 
     # Append recent history for context
     if request.history:
@@ -976,7 +984,7 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
 
         try:
             result = await _execute_tool_with_heartbeat(
-                "connect_database", {"connection_string": detected_uri}, db, heartbeat_queue
+                "connect_database", {"connection_string": detected_uri}, db, heartbeat_queue, user_id=user_id
             )
             yield _sse(_step_event(step_counter, "connect_database", "done"))
         except Exception as exc:
@@ -1003,7 +1011,7 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
             yield _sse(_step_event(step_counter, "discover_schema", "running"))
             try:
                 schema_result = await _execute_tool_with_heartbeat(
-                    "discover_schema", {"connector_id": new_id}, db, heartbeat_queue
+                    "discover_schema", {"connector_id": new_id}, db, heartbeat_queue, user_id=user_id
                 )
                 yield _sse(_step_event(step_counter, "discover_schema", "done"))
                 # Cache schema for future queries
@@ -1070,7 +1078,7 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
             result = await _execute_tool_with_heartbeat(
                 "query_database",
                 {"connector_id": request.connector_id, "question": request.message},
-                db, heartbeat_queue
+                db, heartbeat_queue, user_id=user_id
             )
             yield _sse({"type": "status", "step": step_counter, "label": "Querying all tables", "description": "Fetching sample data from each table", "phase": "done", "tool": "query_database"})
             # Cache schema from multi-table results
@@ -1125,7 +1133,7 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
                 result = await _execute_tool_with_heartbeat(
                     _forced_tool,
                     {"connector_id": request.connector_id, "sql": _forced_sql},
-                    db, heartbeat_queue,
+                    db, heartbeat_queue, user_id=user_id,
                 )
                 yield _sse(_step_event(step_counter, _forced_tool, "done"))
             except Exception as exc:
@@ -1239,7 +1247,7 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
                 yield _sse(_step_event(step_counter, tool_name, "running"))
 
                 try:
-                    result = await _execute_tool_with_heartbeat(tool_name, tool_args, db, heartbeat_queue)
+                    result = await _execute_tool_with_heartbeat(tool_name, tool_args, db, heartbeat_queue, user_id=user_id)
                     yield _sse(_step_event(step_counter, tool_name, "done"))
                     # Update schema cache with new knowledge
                     _update_schema_cache(request.connector_id, result)
@@ -1284,7 +1292,7 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
                             q_result = await _execute_tool_with_heartbeat(
                                 "query_database",
                                 {"connector_id": request.connector_id, "question": request.message},
-                                db, heartbeat_queue,
+                                db, heartbeat_queue, user_id=user_id,
                             )
                             yield _sse(_step_event(step_counter, "query_database", "done"))
                         except Exception as qexc:
@@ -1413,7 +1421,7 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
 
                 # Execute tool with heartbeat keepalive
                 try:
-                    result = await _execute_tool_with_heartbeat(name, args, db, heartbeat_queue)
+                    result = await _execute_tool_with_heartbeat(name, args, db, heartbeat_queue, user_id=user_id)
                     yield _sse(_step_event(cur_step, name, "done"))
                     # Update schema cache with new knowledge
                     _update_schema_cache(request.connector_id, result)
@@ -1469,7 +1477,7 @@ async def _agent_stream(request: ChatRequest, db: Session) -> AsyncGenerator[str
                                 q_result = await _execute_tool_with_heartbeat(
                                     "query_database",
                                     {"connector_id": request.connector_id, "question": request.message},
-                                    db, heartbeat_queue,
+                                    db, heartbeat_queue, user_id=user_id,
                                 )
                                 yield _sse(_step_event(step_counter, "query_database", "done"))
                             except Exception as qexc:
@@ -1873,10 +1881,14 @@ def _summarize_tool_result(tool_name: str, result: dict) -> dict:
 # ──────────────────────────────────────────────
 
 @router.post("/chat")
-async def agent_chat(request: ChatRequest, db: Session = Depends(get_db)):
+async def agent_chat(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Main agent chat — streams SSE events."""
     return StreamingResponse(
-        _agent_stream(request, db),
+        _agent_stream(request, db, user_id=str(current_user.id)),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

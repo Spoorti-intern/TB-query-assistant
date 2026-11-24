@@ -15,6 +15,7 @@ class ChatSession(Base):
     )
     title = Column(String(200), nullable=False, default="New Chat")
     connector_id = Column(String(36), nullable=True)
+    user_id = Column(String(36), nullable=True, index=True)
     messages = Column(JSON, nullable=True, default=list)
 
     created_at = Column(

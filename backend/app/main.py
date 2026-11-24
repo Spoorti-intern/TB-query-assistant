@@ -16,11 +16,32 @@ from app.api.payments import router as payments_router
 from app.api.admin import router as admin_router
 from app.database import Base, engine
 from app.models.user import User, Payment  # noqa: F401
+from sqlalchemy import text, inspect as sa_inspect
 
 load_dotenv()
 
 # Auto-create tables on startup
 Base.metadata.create_all(bind=engine)
+
+# Migrate: add user_id column to existing tables if missing
+def _run_migrations():
+    inspector = sa_inspect(engine)
+    migrations = [
+        ("connectors", "user_id", "VARCHAR(36)"),
+        ("chat_sessions", "user_id", "VARCHAR(36)"),
+    ]
+    with engine.begin() as conn:
+        for table, col, col_type in migrations:
+            if table in inspector.get_table_names():
+                existing_cols = [c["name"] for c in inspector.get_columns(table)]
+                if col not in existing_cols:
+                    conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {col} {col_type}'))
+                    logging.info("Migration: added %s to %s", col, table)
+
+try:
+    _run_migrations()
+except Exception as e:
+    logging.warning("Migration skipped: %s", e)
 
 logging.basicConfig(
     level=logging.INFO,

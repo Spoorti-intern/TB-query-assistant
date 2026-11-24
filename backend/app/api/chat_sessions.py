@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.chat_session import ChatSession
+from app.models.user import User
+from app.core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
@@ -29,9 +31,13 @@ class SessionUpdate(BaseModel):
 
 
 @router.get("/")
-def list_sessions(db: Session = Depends(get_db)):
+def list_sessions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     sessions = (
         db.query(ChatSession)
+        .filter(ChatSession.user_id == str(current_user.id))
         .order_by(ChatSession.updated_at.desc())
         .limit(50)
         .all()
@@ -40,11 +46,16 @@ def list_sessions(db: Session = Depends(get_db)):
 
 
 @router.post("/")
-def create_session(data: SessionCreate, db: Session = Depends(get_db)):
+def create_session(
+    data: SessionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     session = ChatSession(
         title=data.title,
         connector_id=data.connector_id,
         messages=[],
+        user_id=str(current_user.id),
     )
     db.add(session)
     db.commit()
@@ -53,16 +64,31 @@ def create_session(data: SessionCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{session_id}")
-def get_session(session_id: str, db: Session = Depends(get_db)):
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+def get_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    session = db.query(ChatSession).filter(
+        ChatSession.id == session_id,
+        ChatSession.user_id == str(current_user.id),
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return _serialize(session)
 
 
 @router.put("/{session_id}")
-def update_session(session_id: str, data: SessionUpdate, db: Session = Depends(get_db)):
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+def update_session(
+    session_id: str,
+    data: SessionUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    session = db.query(ChatSession).filter(
+        ChatSession.id == session_id,
+        ChatSession.user_id == str(current_user.id),
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -79,8 +105,15 @@ def update_session(session_id: str, data: SessionUpdate, db: Session = Depends(g
 
 
 @router.delete("/{session_id}")
-def delete_session(session_id: str, db: Session = Depends(get_db)):
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+def delete_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    session = db.query(ChatSession).filter(
+        ChatSession.id == session_id,
+        ChatSession.user_id == str(current_user.id),
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -94,9 +127,17 @@ class GenerateTitleRequest(BaseModel):
 
 
 @router.post("/{session_id}/generate-title")
-def generate_title(session_id: str, data: GenerateTitleRequest, db: Session = Depends(get_db)):
+def generate_title(
+    session_id: str,
+    data: GenerateTitleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Generate a short, descriptive title for a session based on its messages."""
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    session = db.query(ChatSession).filter(
+        ChatSession.id == session_id,
+        ChatSession.user_id == str(current_user.id),
+    ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 

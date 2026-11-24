@@ -243,9 +243,14 @@ export async function streamAgentChat(message, connectorId, history, onEvent) {
 
   let response;
   try {
+    const token = localStorage.getItem("qops_token");
+    const headers = { "Content-Type": "application/json" };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
     response = await fetch(`${API_BASE_URL}/api/agent/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         message,
         connector_id: connectorId || null,

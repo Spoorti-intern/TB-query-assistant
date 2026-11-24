@@ -15,8 +15,10 @@ from app.core.llm_client import get_llm_client
 
 from app.database import get_db
 from app.models.connector import Connector
+from app.models.user import User
 from app.core.mongodb_query_engine import execute_mongodb_query
 from app.core.mongodb_schema_manager import discover_mongodb_schema
+from app.core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +57,12 @@ class MongoAskRequest(BaseModel):
 def mongodb_query(
     connector_id: str,
     request: MongoDBQueryRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     connector = db.query(Connector).filter(
-        Connector.id == connector_id
+        Connector.id == connector_id,
+        Connector.user_id == str(current_user.id),
     ).first()
 
     if not connector:
@@ -293,10 +297,12 @@ Explain these results in natural language.
 def ask_mongodb(
     connector_id: str,
     request: MongoAskRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     connector = db.query(Connector).filter(
-        Connector.id == connector_id
+        Connector.id == connector_id,
+        Connector.user_id == str(current_user.id),
     ).first()
 
     if not connector:

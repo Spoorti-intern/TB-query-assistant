@@ -15,8 +15,10 @@ from app.core.llm_client import get_llm_client
 
 from app.database import get_db
 from app.models.connector import Connector
+from app.models.user import User
 from app.core.connector_manager import get_connector_engine
 from app.core.crypto import encrypt_password
+from app.core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -169,18 +171,21 @@ def parse_connection_string(conn_str: str) -> dict:
 # AUTO-CONNECT FROM CONNECTION STRING
 # --------------------------------------------------
 
-def auto_connect(parsed: dict, db: Session) -> dict:
+def auto_connect(parsed: dict, db: Session, user_id: str = None) -> dict:
     """Create a connector from parsed connection string, test it, and return info."""
     # Generate a name from host
     host_short = parsed["host"].split(".")[0] if parsed["host"] else "database"
     name = f"{parsed['connector_type'].title()} - {host_short}"
 
-    # Check if a connector with same host+port+database already exists
-    existing = db.query(Connector).filter(
+    # Check if a connector with same host+port+database already exists for this user
+    q = db.query(Connector).filter(
         Connector.host == parsed["host"],
         Connector.port == parsed["port"],
-        Connector.database == parsed["database"]
-    ).first()
+        Connector.database == parsed["database"],
+    )
+    if user_id:
+        q = q.filter(Connector.user_id == user_id)
+    existing = q.first()
 
     if existing:
         return {
@@ -203,7 +208,8 @@ def auto_connect(parsed: dict, db: Session) -> dict:
         database=parsed["database"],
         username=parsed["username"],
         password=encrypted_pw,
-        status="configured"
+        status="configured",
+        user_id=user_id,
     )
 
     try:
@@ -316,7 +322,8 @@ Always be helpful and conversational."""
 @router.post("/")
 def smart_chat(
     request: ChatRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     message = request.message.strip()
     if not message:
@@ -328,7 +335,7 @@ def smart_chat(
     # Step 2: Handle connection strings
     if input_type == "connection_string":
         parsed = parse_connection_string(message)
-        result = auto_connect(parsed, db)
+        result = auto_connect(parsed, db, user_id=str(current_user.id))
         return {
             "type": "connection",
             "response": result["message"],

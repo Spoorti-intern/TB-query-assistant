@@ -23,6 +23,7 @@ class Connector(Base):
     username = Column(String(255), nullable=True)
     password = Column(String(500), nullable=True)
     status = Column(String(50), default="configured")
+    user_id = Column(String(36), nullable=True, index=True)
 
     created_at = Column(
         DateTime(timezone=True),

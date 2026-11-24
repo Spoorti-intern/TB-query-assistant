@@ -34,6 +34,25 @@ class User(Base):
     payments = relationship("Payment", back_populates="user", order_by="Payment.created_at.desc()")
 
 
+class OTPCode(Base):
+    __tablename__ = "otp_codes"
+
+    id = Column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4())
+    )
+    email = Column(String(255), nullable=False, index=True)
+    code = Column(String(6), nullable=False)
+    expires_at = Column(Float, nullable=False)  # Unix timestamp
+    used = Column(Boolean, default=False)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+
+
 class Payment(Base):
     __tablename__ = "payments"
 

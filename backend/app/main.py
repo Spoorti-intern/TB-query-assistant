@@ -15,7 +15,7 @@ from app.api.auth import router as auth_router
 from app.api.payments import router as payments_router
 from app.api.admin import router as admin_router
 from app.database import Base, engine
-from app.models.user import User, Payment  # noqa: F401
+from app.models.user import User, Payment, OTPCode  # noqa: F401
 from sqlalchemy import text, inspect as sa_inspect
 
 load_dotenv()

@@ -6,10 +6,11 @@ import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-logger = logging.getLogger(__name__)
+from sqlalchemy.orm import Session
 
-# In-memory OTP store: { email: { "code": "123456", "expires": timestamp } }
-_otp_store: dict[str, dict] = {}
+from app.models.user import OTPCode
+
+logger = logging.getLogger(__name__)
 
 OTP_EXPIRY_SECONDS = 300  # 5 minutes
 
@@ -18,26 +19,47 @@ def generate_otp() -> str:
     return str(random.randint(100000, 999999))
 
 
-def store_otp(email: str, code: str):
-    _otp_store[email.lower()] = {
-        "code": code,
-        "expires": time.time() + OTP_EXPIRY_SECONDS,
-    }
-
-
-def verify_otp(email: str, code: str) -> bool:
+def store_otp(db: Session, email: str, code: str):
+    """Store OTP in the database (works across Vercel serverless instances)."""
     key = email.lower()
-    entry = _otp_store.get(key)
+    # Remove any existing OTPs for this email
+    db.query(OTPCode).filter(OTPCode.email == key).delete()
+    otp_entry = OTPCode(
+        email=key,
+        code=code,
+        expires_at=time.time() + OTP_EXPIRY_SECONDS,
+    )
+    db.add(otp_entry)
+    db.commit()
+
+
+def verify_otp(db: Session, email: str, code: str) -> bool:
+    """Verify OTP from the database."""
+    key = email.lower()
+    entry = db.query(OTPCode).filter(
+        OTPCode.email == key,
+        OTPCode.used == False,
+    ).order_by(OTPCode.id.desc()).first()
+
     if not entry:
         return False
-    if time.time() > entry["expires"]:
-        _otp_store.pop(key, None)
+    if time.time() > entry.expires_at:
+        db.delete(entry)
+        db.commit()
         return False
-    if entry["code"] != code:
+    if entry.code != code:
         return False
-    # OTP verified — remove it so it can't be reused
-    _otp_store.pop(key, None)
+
+    # OTP verified — mark as used and delete
+    db.delete(entry)
+    db.commit()
     return True
+
+
+def cleanup_expired_otps(db: Session):
+    """Remove expired OTPs from the database."""
+    db.query(OTPCode).filter(OTPCode.expires_at < time.time()).delete()
+    db.commit()
 
 
 def send_otp_email(to_email: str, otp_code: str) -> tuple[bool, str]:

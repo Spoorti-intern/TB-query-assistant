@@ -31,7 +31,7 @@ async def send_otp(data: OTPSendRequest, db: Session = Depends(get_db)):
         )
 
     code = generate_otp()
-    store_otp(data.email, code)
+    store_otp(db, data.email, code)
     email_sent, error_reason = send_otp_email(data.email, code)
 
     if not email_sent:
@@ -49,7 +49,7 @@ async def send_otp(data: OTPSendRequest, db: Session = Depends(get_db)):
 @router.post("/verify-otp", response_model=TokenResponse)
 async def verify_otp_and_register(data: OTPVerifyRequest, db: Session = Depends(get_db)):
     """Verify OTP and complete registration. Allows re-registration with same email."""
-    if not verify_otp(data.email, data.otp):
+    if not verify_otp(db, data.email, data.otp):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OTP. Please request a new one."
@@ -149,7 +149,7 @@ async def send_login_otp(data: LoginOTPSendRequest, db: Session = Depends(get_db
         )
 
     code = generate_otp()
-    store_otp(data.email, code)
+    store_otp(db, data.email, code)
     email_sent, error_reason = send_otp_email(data.email, code)
 
     if not email_sent:
@@ -174,7 +174,7 @@ async def verify_login_otp(data: LoginOTPVerifyRequest, db: Session = Depends(ge
             detail="Invalid email or password"
         )
 
-    if not verify_otp(data.email, data.otp):
+    if not verify_otp(db, data.email, data.otp):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OTP. Please request a new one."
